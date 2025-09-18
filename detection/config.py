@@ -11,7 +11,7 @@ RAW_FRAMES_QUEUE = 'raw_frames'
 DETECTION_RESULTS_QUEUE = 'detection_results'
 
 # YOLO Settings
-YOLO_MODEL = 'models/yolov8n.pt'  # Nano version for faster processing
+YOLO_MODEL = '../models/yolov8n.pt'  # Nano version for faster processing
 CONFIDENCE_THRESHOLD = 0.5
 PERSON_CLASS_ID = 0  # In YOLO, 'person' class has ID 0
 
