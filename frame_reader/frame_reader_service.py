@@ -57,6 +57,37 @@ class FrameReaderService:
             print(f"Error converting frame to base64: {e}")
             return None
     
+    def send_end_of_video_signal(self, video_path, total_processed_frames):
+        """Send completion signal to detection results queue"""
+        try:
+            completion_message = {
+                'frame_id': str(uuid.uuid4()),
+                'timestamp': datetime.now().isoformat(),
+                'end_of_video': True,
+                'video_path': video_path,
+                'total_processed_frames': total_processed_frames,
+                'processing_complete': True,
+                'processed_frame': '',  # Empty frame data
+                'detections': [],
+                'human_count': 0,
+                'frame_number': total_processed_frames
+            }
+            
+            # Send completion signal to detection results queue
+            # This ensures the streaming service receives it
+            success = self.rabbitmq_client.publish_message('detection_results', completion_message)
+            
+            if success:
+                print(f"✅ Sent end-of-video signal for {video_path}")
+            else:
+                print(f"❌ Failed to send end-of-video signal")
+                
+            return success
+            
+        except Exception as e:
+            print(f"Error sending end-of-video signal: {e}")
+            return False
+    
     def process_video(self, video_path):
         """Process video file and extract frames"""
         print(f"Starting to process video: {video_path}")
@@ -135,6 +166,14 @@ class FrameReaderService:
             print(f"Error during video processing: {e}")
         finally:
             cap.release()
+            
+            # CRITICAL: Send end-of-video signal after processing completes
+            if processed_count > 0:
+                print(f"📹 Video processing completed. Sending completion signal...")
+                self.send_end_of_video_signal(video_path, processed_count)
+                # Wait a moment to ensure the message is sent
+                time.sleep(1)
+            
             self.rabbitmq_client.close()
         
         print(f"Video processing completed. Processed {processed_count} frames out of {frame_count} total frames")
