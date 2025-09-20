@@ -62,7 +62,7 @@ class StreamingService:
         self.rabbitmq_client = None
         self.frame_buffer = deque(maxlen=100)
         self.stats = {
-            "total_frames": 0,
+            "total_frames": 0,  
             "total_humans": 0,
             "current_human_count": 0,
             "current_frame_number": 0,
@@ -397,6 +397,73 @@ class StreamingService:
             except Exception as e:
                 print(f"Broadcast worker error: {e}")
 
+"""
+StreamingService Class
+----------------------
+
+function name : __init__
+benefit       : Initialize service state (WebSockets, RabbitMQ client, stats, frame buffers, directories).
+return        : None
+
+function name : setup_rabbitmq
+benefit       : Connect to RabbitMQ using config values.
+return        : bool (True if connected successfully, False otherwise)
+
+function name : handle_detection_result
+benefit       : Handle incoming detection results from RabbitMQ (update stats, save frames, broadcast updates).
+return        : None
+
+function name : start_finalization_timer
+benefit       : Start/reset a 10s timer to auto-finalize video if no frames are received.
+return        : None
+
+function name : auto_finalize_video
+benefit       : Automatically finalize video if frames stop arriving.
+return        : None
+
+function name : save_processed_frame
+benefit       : Decode base64 frame → OpenCV image → append to output video.
+return        : None
+
+function name : initialize_video_writer
+benefit       : Initialize OpenCV VideoWriter for saving processed frames as a video file.
+return        : None
+
+function name : finalize_processed_video
+benefit       : Release video writer, verify saved file, update status.
+return        : str or None (path to saved video or None if failed)
+
+function name : start_consuming
+benefit       : Start RabbitMQ message consumption in a background thread.
+return        : None
+
+function name : _consume_loop
+benefit       : Internal loop to receive messages from RabbitMQ and call handler.
+return        : None
+
+function name : stop_consuming
+benefit       : Stop RabbitMQ consumption and finalize any pending video.
+return        : None
+
+function name : update_processing_status
+benefit       : Update stats with new processing status and optionally the current video name.
+return        : None
+
+function name : reset_stats
+benefit       : Reset counters, clear video writer, reset processing state.
+return        : None
+
+function name : trigger_frame_reader
+benefit       : Launch the frame reader microservice as a subprocess for a given video.
+return        : bool (True if started successfully, False otherwise)
+
+function name : broadcast_worker
+benefit       : Async worker that sends messages from broadcast queue to WebSocket clients.
+return        : None (coroutine, runs indefinitely)
+"""
+
+
+
 # Global service instance
 streaming_service = None
 
@@ -418,8 +485,13 @@ async def lifespan(app: FastAPI):
     streaming_service.stop_consuming()
 
 app = FastAPI(title="Video Detection Streaming Service", lifespan=lifespan)
+"""lifespan
+It’s a modern, cleaner replacement for startup/shutdown events:
+Before the app starts → you can connect to a database, load ML models, initialize queues, etc.
+After the app stops → you can close DB connections, free memory, disconnect message brokers, etc.
+"""
 
-# Add CORS middleware
+# Add CORS middleware, Middleware is code that runs before and after every request.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -430,6 +502,8 @@ app.add_middleware(
 
 # Initialize service instance after app creation
 streaming_service = StreamingService()
+
+
 
 @app.post("/api/upload")
 async def upload_video(file: UploadFile = File(...)):
@@ -642,6 +716,49 @@ async def check_video_status(filename: str):
 @app.get("/health")
 async def health_check():
     return JSONResponse({"status": "healthy", "service": "streaming"})
+
+
+"""
+API Endpoints Documentation
+---------------------------
+
+function name : upload_video
+benefit       : Upload a video file, validate format, save to uploads folder, reset stats, update status.
+return        : JSONResponse (message, filename, file_path, status)
+
+function name : start_stream
+benefit       : Start video processing pipeline, trigger frame reader, update status.
+return        : JSONResponse (message, filename, status)
+
+function name : get_stats
+benefit       : Get current detection statistics safely (thread-safe copy).
+return        : JSONResponse (stats dict)
+
+function name : get_status
+benefit       : Get current processing status (status, video name, clients, buffer size, video readiness).
+return        : JSONResponse (status info dict)
+
+function name : finalize_video
+benefit       : Manually finalize video processing and save output file.
+return        : JSONResponse (message, output_path, status)
+
+function name : download_processed_video
+benefit       : Download processed video file if it exists and is valid.
+return        : FileResponse (video file with headers) or HTTPException
+
+function name : websocket_endpoint
+benefit       : WebSocket endpoint for real-time frame streaming and client communication.
+return        : None (bi-directional WebSocket stream)
+
+function name : check_video_status
+benefit       : Check if the processed video exists and is ready for download.
+return        : JSONResponse (file existence, size, readiness)
+
+function name : health_check
+benefit       : Basic health check endpoint for monitoring service availability.
+return        : JSONResponse ({status: "healthy", service: "streaming"})
+"""
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host=config.HOST, port=config.PORT)
